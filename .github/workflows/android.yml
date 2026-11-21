@@ -15,23 +15,6 @@ jobs:
       - name: Download repository
         uses: actions/checkout@v4
 
-      - name: Extract SKYFRONT archive
-        run: |
-          if [ -f "SKYFRONT-Android.zip" ]; then
-            mkdir -p skyfront
-            unzip -o SKYFRONT-Android.zip -d skyfront
-            echo "SKYFRONT archive extracted!"
-          else
-            echo "SKYFRONT-Android.zip not found!"
-            ls -la
-            exit 1
-          fi
-
-      - name: Show project files
-        run: |
-          echo "===== SKYFRONT FILES ====="
-          find skyfront -maxdepth 3 -type f | head -100
-
       - name: Install Java
         uses: actions/setup-java@v4
         with:
@@ -56,7 +39,27 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip build-essential
+          sudo apt-get install -y git zip unzip build-essential curl
+
+      - name: Download SKYFRONT archive
+        run: |
+          curl -fL \
+            "https://github.com/AquaKebab/SKYFRONT-Android/releases/download/source-v1/SKYFRONT-Android.zip" \
+            -o SKYFRONT-Android.zip
+
+          echo "===== ARCHIVE SIZE ====="
+          ls -lh SKYFRONT-Android.zip
+
+      - name: Test archive
+        run: |
+          unzip -t SKYFRONT-Android.zip
+
+      - name: Extract SKYFRONT archive
+        run: |
+          mkdir -p skyfront
+          unzip -o SKYFRONT-Android.zip -d skyfront
+          echo "===== SKYFRONT FILES ====="
+          find skyfront -maxdepth 3 -type f | head -150
 
       - name: Check cloud Linux
         run: |
