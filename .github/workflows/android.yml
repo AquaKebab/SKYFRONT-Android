@@ -58,10 +58,6 @@ jobs:
             "https://github.com/AquaKebab/SKYFRONT-Android/releases/download/source-v1/SKYFRONT-Android.zip" \
             -o SKYFRONT-Android.zip
 
-          ls -lh SKYFRONT-Android.zip
-
-      - name: Test archive
-        run: |
           unzip -t SKYFRONT-Android.zip
 
       - name: Extract SKYFRONT archive
@@ -74,7 +70,7 @@ jobs:
           test -d skyfront/game
           test -d skyfront/assets
 
-      - name: Install Panda3D and build dependencies
+      - name: Install Panda3D and protobuf
         working-directory: skyfront
         run: |
           python -m pip install --upgrade pip setuptools wheel
@@ -86,8 +82,8 @@ jobs:
 
           python -m pip install --upgrade protobuf
 
-          python -c "from panda3d.core import PandaSystem; print('Panda3D:', PandaSystem.getVersionString())"
-          python -c "import google.protobuf; print('Protobuf:', google.protobuf.__version__)"
+          python -c "from panda3d.core import PandaSystem; print(PandaSystem.getVersionString())"
+          python -c "import google.protobuf; print('Protobuf OK')"
 
       - name: Download Android Panda3D wheels
         working-directory: skyfront
@@ -102,7 +98,6 @@ jobs:
             "https://rdb.name/panda3d-1.11.0-cp313-cp313-android_armv7a.whl" \
             -o android-wheels/panda3d-1.11.0-cp313-cp313-android_armv7a.whl
 
-          echo "===== ANDROID WHEELS ====="
           ls -lh android-wheels
 
           printf '%s\n' \
@@ -110,15 +105,9 @@ jobs:
             "panda3d==1.11.0" \
             > requirements.txt
 
-          echo "===== ANDROID REQUIREMENTS ====="
-          cat requirements.txt
-
       - name: Verify Android wheels
         working-directory: skyfront
         run: |
-          mkdir -p /tmp/wheel-test-arm64
-          mkdir -p /tmp/wheel-test-armv7
-
           python -m pip download \
             --no-deps \
             --only-binary=:all: \
@@ -141,11 +130,7 @@ jobs:
             --abi cp313 \
             panda3d==1.11.0
 
-          echo "===== ARM64 WHEEL TEST ====="
-          ls -lh /tmp/wheel-test-arm64
-
-          echo "===== ARMV7 WHEEL TEST ====="
-          ls -lh /tmp/wheel-test-armv7
+          echo "Android wheels verified"
 
       - name: Create Android setup.py
         working-directory: skyfront
@@ -154,10 +139,10 @@ jobs:
           from setuptools import setup
 
           PRC_DATA = """
+          notify-level debug
+          gl-debug true
           load-display pandagles2
           aux-display pandagles
-          notify-level info
-          gl-debug false
           """
 
           setup(
@@ -166,7 +151,7 @@ jobs:
               options={
                   "build_apps": {
                       "application_id": "com.aquakebab.skyfront",
-                      "android_version_code": 1,
+                      "android_version_code": 2,
 
                       "platforms": ["android"],
 
@@ -177,12 +162,18 @@ jobs:
 
                       "android_min_sdk_version": 21,
                       "android_target_sdk_version": 36,
+                      "android_debuggable": True,
 
                       "requirements_path": "requirements.txt",
 
                       "gui_apps": {
                           "SKYFRONT": "main.py",
                       },
+
+                      "log_filename": "$USER_APPDATA/SKYFRONT/skyfront.log",
+                      "log_append": False,
+
+                      "use_optimized_wheels": False,
 
                       "plugins": [
                           "pandagles2",
@@ -194,6 +185,7 @@ jobs:
                           "SKYFRONT.png",
                           "assets/**/*.png",
                           "assets/**/*.jpg",
+                          "assets/**/*.jpeg",
                           "assets/**/*.wav",
                           "assets/**/*.egg",
                           "assets/**/*.bam",
@@ -208,10 +200,9 @@ jobs:
           )
           PY
 
-          echo "===== GENERATED SETUP ====="
           cat setup.py
 
-      - name: Prepare clean build
+      - name: Prepare build
         working-directory: skyfront
         run: |
           rm -rf build dist
@@ -228,7 +219,7 @@ jobs:
           AAB="$(find dist -maxdepth 1 -type f -name '*.aab' -print -quit)"
 
           if [ -z "$AAB" ]; then
-            echo "ERROR: Android App Bundle was not created"
+            echo "ERROR: AAB was not created"
             exit 1
           fi
 
@@ -265,14 +256,14 @@ jobs:
 
           unzip -p dist/SKYFRONT.apks universal.apk > dist/SKYFRONT.apk
 
-          echo "===== APK RESULT ====="
+          echo "===== APK ====="
           ls -lh dist/SKYFRONT.apk
           file dist/SKYFRONT.apk
 
       - name: Upload SKYFRONT APK
         uses: actions/upload-artifact@v4
         with:
-          name: SKYFRONT-Android
+          name: SKYFRONT-Android-Debug
           path: |
             skyfront/dist/SKYFRONT.apk
             skyfront/dist/*.aab
