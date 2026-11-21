@@ -47,7 +47,6 @@ jobs:
             "https://github.com/AquaKebab/SKYFRONT-Android/releases/download/source-v1/SKYFRONT-Android.zip" \
             -o SKYFRONT-Android.zip
 
-          echo "===== ARCHIVE SIZE ====="
           ls -lh SKYFRONT-Android.zip
 
       - name: Test archive
@@ -59,31 +58,36 @@ jobs:
           mkdir -p skyfront
           unzip -o SKYFRONT-Android.zip -d skyfront
 
-          echo "===== SKYFRONT FILES ====="
-          find skyfront -maxdepth 3 -type f | head -150
-
       - name: Inspect Android build files
         run: |
-          echo "===== ROOT FILES ====="
-          ls -la skyfront
+          echo "===== REQUIREMENTS.TXT ====="
+          cat skyfront/requirements.txt
 
-          echo "===== BUILD CONFIGURATION ====="
-          find skyfront -maxdepth 2 -type f \( \
+          echo "===== ALL PYTHON FILES ====="
+          find skyfront -type f -name "*.py" | sort
+
+          echo "===== ALL IMPORTS ====="
+          grep -R -n -E "^(import |from )" \
+            skyfront/main.py skyfront/settings.py skyfront/game \
+            --include="*.py" || true
+
+          echo "===== ANDROID CONFIGURATION ====="
+          find skyfront -maxdepth 3 -type f \( \
             -name "setup.py" -o \
-            -name "requirements.txt" -o \
             -name "setup_android.py" -o \
-            -name "pyproject.toml" \
+            -name "pyproject.toml" -o \
+            -name "setup.cfg" \
           \) -print
 
-          echo "===== PANDA3D IMPORTS ====="
-          grep -R -n "panda3d" skyfront/*.py skyfront/game/*.py || true
+          echo "===== ASSETS ====="
+          find skyfront/assets -type f | sort
 
       - name: Check cloud Linux
         run: |
-          echo "===== SKYFRONT CLOUD LINUX ====="
+          echo "===== ENVIRONMENT ====="
           uname -a
           python --version
           java -version
           adb version
           git --version
-          echo "===== ENVIRONMENT READY ====="
+          echo "===== INSPECTION COMPLETE ====="
