@@ -93,22 +93,56 @@ jobs:
 
           curl -fL \
             "https://rdb.name/panda3d-1.11.0-cp313-cp313-android_arm64.whl" \
-            -o android-wheels/panda3d-android-arm64.whl
+            -o android-wheels/panda3d-1.11.0-cp313-cp313-android_arm64.whl
 
           curl -fL \
             "https://rdb.name/panda3d-1.11.0-cp313-cp313-android_armv7a.whl" \
-            -o android-wheels/panda3d-android-armv7a.whl
+            -o android-wheels/panda3d-1.11.0-cp313-cp313-android_armv7a.whl
 
           echo "===== ANDROID WHEELS ====="
           ls -lh android-wheels
 
           printf '%s\n' \
             "-f $PWD/android-wheels" \
-            "panda3d" \
+            "panda3d==1.11.0" \
             > requirements.txt
 
           echo "===== ANDROID REQUIREMENTS ====="
           cat requirements.txt
+
+      - name: Verify Android wheels
+        working-directory: skyfront
+        run: |
+          mkdir -p /tmp/wheel-test-arm64
+          mkdir -p /tmp/wheel-test-armv7
+
+          python -m pip download \
+            --no-deps \
+            --only-binary=:all: \
+            --dest /tmp/wheel-test-arm64 \
+            --find-links "$PWD/android-wheels" \
+            --platform android_arm64 \
+            --python-version 313 \
+            --implementation cp \
+            --abi cp313 \
+            panda3d==1.11.0
+
+          python -m pip download \
+            --no-deps \
+            --only-binary=:all: \
+            --dest /tmp/wheel-test-armv7 \
+            --find-links "$PWD/android-wheels" \
+            --platform android_armv7a \
+            --python-version 313 \
+            --implementation cp \
+            --abi cp313 \
+            panda3d==1.11.0
+
+          echo "===== ARM64 WHEEL TEST ====="
+          ls -lh /tmp/wheel-test-arm64
+
+          echo "===== ARMV7 WHEEL TEST ====="
+          ls -lh /tmp/wheel-test-armv7
 
       - name: Create Android setup.py
         working-directory: skyfront
