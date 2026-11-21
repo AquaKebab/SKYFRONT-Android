@@ -58,8 +58,25 @@ jobs:
         run: |
           mkdir -p skyfront
           unzip -o SKYFRONT-Android.zip -d skyfront
+
           echo "===== SKYFRONT FILES ====="
           find skyfront -maxdepth 3 -type f | head -150
+
+      - name: Inspect Android build files
+        run: |
+          echo "===== ROOT FILES ====="
+          ls -la skyfront
+
+          echo "===== BUILD CONFIGURATION ====="
+          find skyfront -maxdepth 2 -type f \( \
+            -name "setup.py" -o \
+            -name "requirements.txt" -o \
+            -name "setup_android.py" -o \
+            -name "pyproject.toml" \
+          \) -print
+
+          echo "===== PANDA3D IMPORTS ====="
+          grep -R -n "panda3d" skyfront/*.py skyfront/game/*.py || true
 
       - name: Check cloud Linux
         run: |
