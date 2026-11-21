@@ -74,7 +74,7 @@ jobs:
           test -d skyfront/game
           test -d skyfront/assets
 
-      - name: Install Panda3D development build
+      - name: Install Panda3D and build dependencies
         working-directory: skyfront
         run: |
           python -m pip install --upgrade pip setuptools wheel
@@ -84,7 +84,10 @@ jobs:
             --extra-index-url https://archive.panda3d.org/ \
             panda3d
 
+          python -m pip install --upgrade protobuf
+
           python -c "from panda3d.core import PandaSystem; print('Panda3D:', PandaSystem.getVersionString())"
+          python -c "import google.protobuf; print('Protobuf:', google.protobuf.__version__)"
 
       - name: Download Android Panda3D wheels
         working-directory: skyfront
