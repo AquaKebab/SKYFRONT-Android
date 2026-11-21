@@ -1,5 +1,5 @@
 
-name: SKYFRONT Android Cloud Linux
+name: SKYFRONT Android APK
 
 on:
   workflow_dispatch:
@@ -7,8 +7,11 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
-  linux-android:
+  android:
     runs-on: ubuntu-24.04
 
     steps:
@@ -24,22 +27,30 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools'
 
-      - name: Install Android components
+      - name: Install Android SDK and NDK
         run: |
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
+          yes | sdkmanager --licenses
+
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;29.0.14206865"
+
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/29.0.14206865" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$SDK_ROOT/ndk/29.0.14206865" >> "$GITHUB_ENV"
 
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip build-essential curl
+          sudo apt-get install -y curl zip unzip
 
       - name: Download SKYFRONT archive
         run: |
@@ -58,36 +69,175 @@ jobs:
           mkdir -p skyfront
           unzip -o SKYFRONT-Android.zip -d skyfront
 
-      - name: Inspect Android build files
+          test -f skyfront/main.py
+          test -f skyfront/settings.py
+          test -d skyfront/game
+          test -d skyfront/assets
+
+      - name: Install Panda3D development build
+        working-directory: skyfront
         run: |
-          echo "===== REQUIREMENTS.TXT ====="
-          cat skyfront/requirements.txt
+          python -m pip install --upgrade pip setuptools wheel
 
-          echo "===== ALL PYTHON FILES ====="
-          find skyfront -type f -name "*.py" | sort
+          python -m pip install \
+            --pre \
+            --extra-index-url https://archive.panda3d.org/ \
+            panda3d
 
-          echo "===== ALL IMPORTS ====="
-          grep -R -n -E "^(import |from )" \
-            skyfront/main.py skyfront/settings.py skyfront/game \
-            --include="*.py" || true
+          python -c "from panda3d.core import PandaSystem; print('Panda3D:', PandaSystem.getVersionString())"
 
-          echo "===== ANDROID CONFIGURATION ====="
-          find skyfront -maxdepth 3 -type f \( \
-            -name "setup.py" -o \
-            -name "setup_android.py" -o \
-            -name "pyproject.toml" -o \
-            -name "setup.cfg" \
-          \) -print
-
-          echo "===== ASSETS ====="
-          find skyfront/assets -type f | sort
-
-      - name: Check cloud Linux
+      - name: Download Android Panda3D wheels
+        working-directory: skyfront
         run: |
-          echo "===== ENVIRONMENT ====="
-          uname -a
-          python --version
-          java -version
-          adb version
-          git --version
-          echo "===== INSPECTION COMPLETE ====="
+          mkdir -p android-wheels
+
+          curl -fL \
+            "https://rdb.name/panda3d-1.11.0-cp313-cp313-android_arm64.whl" \
+            -o android-wheels/panda3d-android-arm64.whl
+
+          curl -fL \
+            "https://rdb.name/panda3d-1.11.0-cp313-cp313-android_armv7a.whl" \
+            -o android-wheels/panda3d-android-armv7a.whl
+
+          echo "===== ANDROID WHEELS ====="
+          ls -lh android-wheels
+
+          printf '%s\n' \
+            "-f $PWD/android-wheels" \
+            "panda3d" \
+            > requirements.txt
+
+          echo "===== ANDROID REQUIREMENTS ====="
+          cat requirements.txt
+
+      - name: Create Android setup.py
+        working-directory: skyfront
+        run: |
+          cat > setup.py <<'PY'
+          from setuptools import setup
+
+          PRC_DATA = """
+          load-display pandagles2
+          aux-display pandagles
+          notify-level info
+          gl-debug false
+          """
+
+          setup(
+              name="SKYFRONT",
+              version="1.0.0",
+              options={
+                  "build_apps": {
+                      "application_id": "com.aquakebab.skyfront",
+                      "android_version_code": 1,
+
+                      "platforms": ["android"],
+
+                      "android_abis": [
+                          "arm64-v8a",
+                          "armeabi-v7a",
+                      ],
+
+                      "android_min_sdk_version": 21,
+                      "android_target_sdk_version": 36,
+
+                      "requirements_path": "requirements.txt",
+
+                      "gui_apps": {
+                          "SKYFRONT": "main.py",
+                      },
+
+                      "plugins": [
+                          "pandagles2",
+                          "pandagles",
+                          "p3openal_audio",
+                      ],
+
+                      "include_patterns": [
+                          "SKYFRONT.png",
+                          "assets/**/*.png",
+                          "assets/**/*.jpg",
+                          "assets/**/*.wav",
+                          "assets/**/*.egg",
+                          "assets/**/*.bam",
+                      ],
+
+                      "extra_prc_data": PRC_DATA,
+                  },
+              },
+              classifiers=[
+                  "Topic :: Games/Entertainment",
+              ],
+          )
+          PY
+
+          echo "===== GENERATED SETUP ====="
+          cat setup.py
+
+      - name: Prepare clean build
+        working-directory: skyfront
+        run: |
+          rm -rf build dist
+          mkdir -p dist
+
+      - name: Build SKYFRONT Android App Bundle
+        working-directory: skyfront
+        run: |
+          python setup.py bdist_apps
+
+          echo "===== BUILD OUTPUT ====="
+          find dist -maxdepth 2 -type f -printf '%p %k KB\n'
+
+          AAB="$(find dist -maxdepth 1 -type f -name '*.aab' -print -quit)"
+
+          if [ -z "$AAB" ]; then
+            echo "ERROR: Android App Bundle was not created"
+            exit 1
+          fi
+
+          echo "ANDROID_AAB=$AAB" >> "$GITHUB_ENV"
+
+      - name: Convert AAB to APK
+        working-directory: skyfront
+        run: |
+          BUNDLETOOL_VERSION="1.18.3"
+
+          curl -fL \
+            "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar" \
+            -o "$RUNNER_TEMP/bundletool.jar"
+
+          keytool -genkeypair \
+            -noprompt \
+            -keystore "$RUNNER_TEMP/skyfront-debug.keystore" \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+
+          java -jar "$RUNNER_TEMP/bundletool.jar" build-apks \
+            --bundle "$ANDROID_AAB" \
+            --output dist/SKYFRONT.apks \
+            --mode=universal \
+            --ks "$RUNNER_TEMP/skyfront-debug.keystore" \
+            --ks-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --key-pass pass:android
+
+          unzip -p dist/SKYFRONT.apks universal.apk > dist/SKYFRONT.apk
+
+          echo "===== APK RESULT ====="
+          ls -lh dist/SKYFRONT.apk
+          file dist/SKYFRONT.apk
+
+      - name: Upload SKYFRONT APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SKYFRONT-Android
+          path: |
+            skyfront/dist/SKYFRONT.apk
+            skyfront/dist/*.aab
+          if-no-files-found: error
+          retention-days: 14
