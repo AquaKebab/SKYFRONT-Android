@@ -15,6 +15,23 @@ jobs:
       - name: Download repository
         uses: actions/checkout@v4
 
+      - name: Extract SKYFRONT archive
+        run: |
+          if [ -f "SKYFRONT-Android.zip" ]; then
+            mkdir -p skyfront
+            unzip -o SKYFRONT-Android.zip -d skyfront
+            echo "SKYFRONT archive extracted!"
+          else
+            echo "SKYFRONT-Android.zip not found!"
+            ls -la
+            exit 1
+          fi
+
+      - name: Show project files
+        run: |
+          echo "===== SKYFRONT FILES ====="
+          find skyfront -maxdepth 3 -type f | head -100
+
       - name: Install Java
         uses: actions/setup-java@v4
         with:
